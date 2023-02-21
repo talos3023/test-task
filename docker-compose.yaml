@@ -1,0 +1,151 @@
+version: '3.7'
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:20.0.3
+    command: [ 'start-dev --import-realm' ]
+    volumes:
+      - ./realm-config:/opt/keycloak/data/import
+    environment:
+      - KC_DB=dev-file
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_FEATURES=scripts
+      - KC_HTTP_PORT=9080
+      - KC_HTTPS_PORT=9443
+    ports:
+      - "9080:9080"
+      - "9443:9443"
+    networks:
+      - test-task-network
+
+  redis_db:
+    image: redis:6.2-alpine
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+    ports:
+      - "6379:6379"
+    networks:
+      - test-task-network
+
+  products_db:
+    image: mysql:8.0
+    cap_add:
+      - SYS_NICE
+    restart: always
+    environment:
+      - MYSQL_DATABASE=products
+      - MYSQL_ROOT_PASSWORD=mauFJcuf5dhRMQrjj
+      - MYSQL_PASSWORD=password123
+      - MYSQL_USER=user
+    ports:
+      - '3200:3306'
+    networks:
+      - test-task-network
+    volumes:
+      - mysql:/var/lib/mysql
+
+  orders_db:
+    image: mysql:8.0
+    cap_add:
+      - SYS_NICE
+    restart: always
+    environment:
+      - MYSQL_DATABASE=products
+      - MYSQL_ROOT_PASSWORD=mauFJcuf5dhRMQrjj
+      - MYSQL_PASSWORD=password123
+      - MYSQL_USER=user
+    ports:
+      - '3100:3306'
+    networks:
+      - test-task-network
+    volumes:
+      - mysql:/var/lib/mysql
+
+  naming-server:
+    image: qartlelishvilio/naming-server:0.0.1-SNAPSHOT
+    mem_limit: 700m
+    ports:
+      - "8761:8761"
+    networks:
+      - test-task-network
+
+  api-gateway:
+    image: qartlelishvilio/api-gateway:0.0.1-SNAPSHOT
+    mem_limit: 700m
+    ports:
+      - "8765:8765"
+    networks:
+      - test-task-network
+    depends_on:
+      - naming-server
+    environment:
+      - NAMING_SERVER=naming-server
+
+  notifications-service:
+    image: qartlelishvilio/notifications-service:0.0.1-SNAPSHOT
+    mem_limit: 700m
+    ports:
+      - "8300:8300"
+    networks:
+      - test-task-network
+    depends_on:
+      - naming-server
+    environment:
+      - NAMING_SERVER=naming-server
+      - REDIS_HOST=redis_db
+      - SENDGRID_API_KEY=sendgrid_key
+
+  order-service:
+    image: qartlelishvilio/order-service:0.0.1-SNAPSHOT
+    mem_limit: 700m
+    ports:
+      - "8000:8000"
+    networks:
+      - test-task-network
+    depends_on:
+      - naming-server
+    environment:
+      - NAMING_SERVER=naming-server
+      - REDIS_HOST=redis_db
+
+  package-and-delivery-service:
+    image: qartlelishvilio/package-and-delivery-service:0.0.1-SNAPSHOT
+    mem_limit: 700m
+    ports:
+      - "8100:8100"
+    networks:
+      - test-task-network
+    depends_on:
+      - naming-server
+    environment:
+      - DB_USER=user
+      - DB_PASSWORD=password123
+      - DB_HOST=orders_db
+      - DB_PORT=3306
+      - DB_NAME=orders
+      - NAMING_SERVER=naming-server
+      - REDIS_HOST=redis_db
+
+  products-service:
+    image: qartlelishvilio/products-service:0.0.1-SNAPSHOT
+    mem_limit: 700m
+    ports:
+      - "8200:8200"
+    networks:
+      - test-task-network
+    depends_on:
+      - naming-server
+      - products_db
+    environment:
+      - DB_USER=user
+      - DB_PASSWORD=password123
+      - DB_HOST=products_db
+      - DB_PORT=3306
+      - DB_NAME=products
+      - NAMING_SERVER=naming-server
+      - REDIS_HOST=redis_db
+
+
+networks:
+  test-task-network:
